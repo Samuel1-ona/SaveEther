@@ -1,6 +1,6 @@
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 
-import { expect } from "chai";
+import { expect, assert} from "chai";
 import { ethers } from "hardhat";
 
 describe("SaveEther", function () {
@@ -13,7 +13,7 @@ describe("SaveEther", function () {
 
     const SaveEther = await ethers.getContractFactory("SaveEther");
     const saveEther = await SaveEther.deploy();
-    const amountToDeposit = ethers.parseEther("1.0");
+    const amountToDeposit = ethers.parseEther("5");
 
     return { saveEther, owner, account1, account2, amountToDeposit };
   }
@@ -31,39 +31,107 @@ describe("SaveEther", function () {
       const checkBalance = await saveEther.checkSavings(account1.address);
 
       expect(checkBalance).to.equal(0);
-      // });
-      // it("should send out savings to other saving account", async function () {
-      //   const { saveEther, account1, account2, amountToDeposit } =
-      //     await loadFixture(deploySaveEther);
+      });
 
-      //   await saveEther.deposit({ value: amountToDeposit });
-
-      //   const beforeSending = await saveEther.checkSavings(account1.address);
-
-      //   expect(amountToDeposit).to.equal(beforeSending);
-
-      // const sendAmount = ethers.parseEther("0.2");
-
-      // await saveEther.sendOutSaving(account2.address, sendAmount);
-
-      // const afterTransferred = await saveEther.checkSavings(account1.address);
-      // expect(afterTransferred).to.equal(amountToDeposit - sendAmount);
+      it("check if owner can check balance", async function (){
+        const { saveEther, owner } = await loadFixture(deploySaveEther);
+        const ownerCheckBalance = await saveEther.checkSavings(owner);
+        expect(ownerCheckBalance).to.equal(0);
+      })
     });
-    it("can send savings to another account ", async () => {
-      const { saveEther,owner, account1, account2, amountToDeposit } =
-        await loadFixture(deploySaveEther);
+
+    it("can send savings to another account", async () => {
+      const { saveEther, owner, account1, account2, amountToDeposit } = await loadFixture(deploySaveEther);
       await saveEther.deposit({ value: amountToDeposit });
-
+    
       const amountToSend = ethers.parseEther("0.5");
-      const beforeTransferBalance = await saveEther.checkSavings(
-        owner.address
-      );
+      const beforeTransferBalance = await saveEther.checkSavings(owner.address);
       expect(beforeTransferBalance).to.equal(amountToDeposit);
-
-      await saveEther.sendOutSaving(account1.address, amountToSend);
-
-      const afterTransferBalance = await saveEther.checkSavings(account1.address)
-      expect(afterTransferBalance).to.equal(amountToSend);
+    
+      const tx = await saveEther.sendOutSaving(account1.address, amountToSend);
+    
+      const afterTransferBalance = await saveEther.checkSavings(owner.address);
+      const expectedBalance = (beforeTransferBalance-amountToSend);
+      expect(afterTransferBalance).to.equal(expectedBalance);
     });
+    it("can not send more than what is inside the savings to another account", async () => {
+      const { saveEther, owner, account1, account2, amountToDeposit } = await loadFixture(deploySaveEther);
+      await saveEther.deposit({ value: amountToDeposit });
+    
+      const amountToSend = ethers.parseEther("10");
+      const beforeTransferBalance = await saveEther.checkSavings(owner.address);
+      expect(beforeTransferBalance).to.equal(amountToDeposit);
+    
+      const tx = await saveEther.sendOutSaving(account1.address, amountToSend);
+    
+      const afterTransferBalance = await saveEther.checkSavings(owner.address);
+      const expectedBalance = (beforeTransferBalance-amountToSend);
+      expect(afterTransferBalance).to.equal(expectedBalance);
+    });
+    it("can not send 0 ether inside the  savings to another account", async () => {
+      const { saveEther, owner, account1, account2, amountToDeposit } = await loadFixture(deploySaveEther);
+      await saveEther.deposit({ value: amountToDeposit });
+    
+      const amountToSend = ethers.parseEther("0");
+      const beforeTransferBalance = await saveEther.checkSavings(owner.address);
+      expect(beforeTransferBalance).to.equal(amountToDeposit);
+    
+      const tx = await saveEther.sendOutSaving(account1.address, amountToSend);
+    
+      const afterTransferBalance = await saveEther.checkSavings(owner.address);
+      const expectedBalance = (beforeTransferBalance-amountToSend);
+      expect(afterTransferBalance).to.equal(expectedBalance);
+    });
+    it("can withdraw savings from the contract", async () => {
+      const { saveEther, owner, account1, account2, amountToDeposit } = await loadFixture(deploySaveEther);
+      await saveEther.deposit({ value: amountToDeposit });
+    
+      // Check the initial savings of the owner
+      const initialOwnerSavings = await saveEther.checkSavings(owner.address);
+    
+      // Withdraw savings from the contract
+      await saveEther.withdraw();
+    
+      // Check if the owner's savings have been correctly deducted
+      const finalOwnerSavings = await saveEther.checkSavings(owner.address);
+      expect(finalOwnerSavings).to.equal(0);
+    
+      // Check if the owner's balance has increased accordingly
+      const ownerBalanceAfterWithdrawal = await ethers.provider.getBalance(owner.address);
+      expect(ownerBalanceAfterWithdrawal).to.be.above(initialOwnerSavings);
+    });
+    it("can withdraw savings from the contract", async () => {
+      const { saveEther, owner, account1, account2, amountToDeposit } = await loadFixture(deploySaveEther);
+      await saveEther.deposit({ value: amountToDeposit });
+    
+      // Check the initial savings of the owner
+      const initialOwnerSavings = await saveEther.checkSavings(owner.address);
+    
+      // Withdraw savings from the contract
+      await saveEther.withdraw();
+    
+      // Check if the owner's savings have been correctly deducted
+      const finalOwnerSavings = await saveEther.checkSavings(owner.address);
+      expect(finalOwnerSavings).to.equal(0);
+    
+      // Check if the owner's balance has increased accordingly
+      const ownerBalanceAfterWithdrawal = await ethers.provider.getBalance(owner.address);
+      expect(ownerBalanceAfterWithdrawal).to.be.above(initialOwnerSavings);
+    });
+    it("can deposit into the savings", async () => {
+      const { saveEther, owner, account1, account2, amountToDeposit } = await loadFixture(deploySaveEther);
+      const initialOwnerSavings = await saveEther.checkSavings(owner.address);
+    
+      const amountToDeposits = ethers.parseEther("1"); // Amount to deposit
+    
+      // Perform deposit into the savings
+      await saveEther.deposit({ value: amountToDeposit });
+    
+      // Check if the owner's savings have increased accordingly
+      const finalOwnerSavings = await saveEther.checkSavings(owner.address);
+      expect(finalOwnerSavings).to.equal(initialOwnerSavings + amountToDeposit);
+    });
+    
+
   });
-});
+// });
